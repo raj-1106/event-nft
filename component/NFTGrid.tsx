@@ -1,70 +1,87 @@
 'use client'
 
-import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { useEffect, useState } from 'react'
-import { fetchWalletNFTs } from '@/lib/metaplex'
+import { useWallet } from '@solana/wallet-adapter-react'
+import { Connection, PublicKey } from '@solana/web3.js'
+import { fetchWalletNFTs } from '@/lib/fetchWalletNFTs'
 
-type NFT = {
+type NFTItem = {
   mintAddress: string
-  name?: string
+  name: string
   image?: string
 }
 
-export default function NFTGrid() {
-  const { connection } = useConnection()
-  const { publicKey } = useWallet()
+const connection = new Connection(
+  'https://api.devnet.solana.com'
+)
 
-  const [nfts, setNfts] = useState<NFT[]>([])
+export default function NFTGrid() {
+  const { publicKey } = useWallet()
+  const [nfts, setNfts] = useState<NFTItem[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!publicKey) return
-
-    async function loadNFTs() {
-      setLoading(true)
-      const result = await fetchWalletNFTs(connection, publicKey)
-
-      const parsed = result.map((nft) => ({
-        mintAddress: nft.address.toBase58(),
-        name: nft.name,
-        image: nft.json?.image,
-      }))
-
-      setNfts(parsed)
-      setLoading(false)
+    // ✅ GUARD: wallet not connected
+    if (!publicKey) {
+      setNfts([])
+      return
     }
 
-    loadNFTs()
-  }, [publicKey, connection])
+    async function loadNFTs(owner: PublicKey) {
+      setLoading(true)
+
+      try {
+        const result = await fetchWalletNFTs(connection, owner)
+
+        const parsed = result.map((nft) => ({
+          mintAddress: nft.address.toBase58(),
+          name: nft.name ?? 'Unnamed NFT',
+          image: nft.json?.image,
+        }))
+
+        setNfts(parsed)
+      } catch (err) {
+        console.error('NFT fetch failed', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadNFTs(publicKey)
+  }, [publicKey])
 
   if (!publicKey) {
-    return <p className="mt-6">Connect wallet to view NFTs</p>
+    return (
+      <p className="text-gray-400">
+        Connect your wallet to view NFTs
+      </p>
+    )
   }
 
   if (loading) {
-    return <p className="mt-6">Loading NFTs...</p>
+    return <p>Loading NFTs...</p>
   }
 
   if (nfts.length === 0) {
-    return <p className="mt-6">No NFTs found</p>
+    return <p>No NFTs found</p>
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
       {nfts.map((nft) => (
         <div
           key={nft.mintAddress}
-          className="border rounded-lg p-4"
+          className="bg-zinc-900 rounded-xl p-4 hover:scale-[1.02] transition"
         >
           {nft.image && (
             <img
               src={nft.image}
               alt={nft.name}
-              className="rounded mb-3"
+              className="rounded-lg mb-3"
             />
           )}
           <h3 className="font-semibold">{nft.name}</h3>
-          <p className="text-xs break-all text-gray-500">
+          <p className="text-xs text-gray-400 break-all">
             {nft.mintAddress}
           </p>
         </div>
